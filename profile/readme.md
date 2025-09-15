@@ -14,7 +14,7 @@ The language name is a reference to the atomic element cesium (American Chemical
 ## Key Features
 
 - **🧮 Math-first Design**: Built-in mathematical operators and types optimized for numerical computing
-- **⚡ High Performance**: Compile-time dispatch, static optimization, and predictable performance characteristics  
+- **⚡ High Performance**: Compile-time dispatch, static optimization, and predictable performance characteristics
 - **🛡️ Memory Safety**: Ownership tracking and compile-time borrow checking with explicit memory management
 - **🔗 C Interoperability**: Seamless integration with existing C libraries and systems
 - **📝 Clear Syntax**: ASCII-only syntax for universal accessibility and readability
@@ -62,6 +62,7 @@ The Cesium language ecosystem is organized across several repositories:
 ### Building from Source
 
 1. Clone the main repository:
+
    ```bash
    git clone https://github.com/cesiumlang/cesium.git
    cd cesium
