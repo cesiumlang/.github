@@ -13,6 +13,7 @@
 | [cesiumlang.org](https://github.com/cesiumlang/cesiumlang.org) | The website: language reference, compiler documentation and the draft specification. It is also the parent repository that holds the others as submodules. |
 | [devkits](https://github.com/cesiumlang/devkits) | Prebuilt toolchain packages the compiler is built with: a pinned Zig, the LLVM and LLD libraries, and QBE. |
 | [grammar](https://github.com/cesiumlang/grammar) | TextMate grammar and other resources for syntax highlighters. |
+| [vscode-cesium](https://github.com/cesiumlang/vscode-cesium) | The VS Code extension. No code yet; it is to be a client of the language server in the compiler. |
 | [cspell-cesium](https://github.com/cesiumlang/cspell-cesium) | cSpell dictionary of Cesium terms. |
 | [cesium-buildtools](https://github.com/cesiumlang/cesium-buildtools) | Windows scripts that install tools the devkit does not contain. |
 
