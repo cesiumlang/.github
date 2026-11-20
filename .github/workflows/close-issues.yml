@@ -1,0 +1,63 @@
+# Closes the issues that a merged pull request names with a closing keyword
+# ("Closes #12", "fixes cesiumlang/grammar#3" for this repository), for
+# pull requests merged into a branch other than the default one: GitHub does
+# that by itself only for the default branch (main), and work here merges
+# into dev. Each repository calls it from its own close-issues.yml.
+#
+# Only issues of the calling repository are closed (the token's reach);
+# references to other repositories are listed in the log and left open.
+name: Close issues
+
+on:
+  workflow_call:
+
+permissions:
+  issues: write
+
+jobs:
+  close:
+    name: Close the issues the pull request names
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Close them
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          BASE: ${{ github.event.pull_request.base.ref }}
+          # title and body through the environment, never into the script
+          TEXT: |
+            ${{ github.event.pull_request.title }}
+            ${{ github.event.pull_request.body }}
+        run: |
+          refs=$(printf '%s\n' "$TEXT" \
+            | grep -oiE '\b(close[sd]?|fix(e[sd])?|resolve[sd]?):?[[:space:]]+([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)?#[0-9]+' \
+            | sed -E 's/^[^[:space:]]+[[:space:]]+//' | sort -u || true)
+          if [ -z "$refs" ]; then
+            echo "No closing keywords in #$PR."
+            exit 0
+          fi
+          for ref in $refs; do
+            repo=${ref%#*}
+            num=${ref##*#}
+            if [ -n "$repo" ] && [ "${repo,,}" != "${REPO,,}" ]; then
+              echo "::notice::#$PR names $ref, in another repository; left open."
+              continue
+            fi
+            info=$(gh api "repos/$REPO/issues/$num" \
+              --jq '[.state, (.pull_request != null)] | @tsv' 2>/dev/null) || {
+              echo "::warning::#$num does not exist in $REPO."
+              continue
+            }
+            state=${info%%$'\t'*}
+            is_pr=${info##*$'\t'}
+            if [ "$is_pr" = true ]; then
+              echo "#$num is a pull request; skipped."
+            elif [ "$state" != open ]; then
+              echo "#$num is already $state."
+            else
+              gh issue close "$num" --repo "$REPO" --reason completed \
+                --comment "Closed by #$PR, merged into \`$BASE\`."
+              echo "Closed #$num."
+            fi
+          done
