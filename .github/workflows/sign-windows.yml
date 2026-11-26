@@ -1,0 +1,117 @@
+# Signs Windows executables with Azure Artifact Signing, for a release of the
+# repository that calls it, as zfls's sign-windows job does
+# (cesiumlang/vscode-cesium#40). The caller uploads the executables as an
+# artifact (any tree of folders), passes its SIGN_* variables as inputs and
+# grants `id-token: write`; the signing identity needs a federated credential
+# for the caller's repository and ref. The signed tree is uploaded as the
+# artifact `signed-artifact`. Signings are limited per month: call this only
+# for a release, or a run started by hand that asks for it.
+name: Sign Windows executables
+
+on:
+  workflow_call:
+    inputs:
+      artifact:
+        description: The artifact that holds the executables
+        type: string
+        required: true
+      signed-artifact:
+        description: The artifact to upload the signed tree as
+        type: string
+        required: true
+      count:
+        description: How many .exe files the artifact must hold
+        type: number
+        required: true
+      run:
+        description: A command run in the signed tree on x86_64 Windows, such as `x86_64-windows/zcsls.exe --version`
+        type: string
+        default: ''
+      client-id:
+        type: string
+        required: true
+      tenant-id:
+        type: string
+        required: true
+      subscription-id:
+        type: string
+        required: true
+      endpoint:
+        type: string
+        required: true
+      account:
+        type: string
+        required: true
+      profile:
+        type: string
+        required: true
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  sign:
+    name: Sign
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ inputs.artifact }}
+          path: tree
+
+      - name: The executables
+        shell: pwsh
+        env:
+          COUNT: ${{ inputs.count }}
+        run: |
+          $exes = @(Get-ChildItem tree -Recurse -Filter *.exe)
+          $exes | ForEach-Object { $_.FullName }
+          if ($exes.Count -ne [int]$env:COUNT) { throw "expected $env:COUNT .exe files, found $($exes.Count)" }
+
+      - name: Sign in to Azure
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ inputs.client-id }}
+          tenant-id: ${{ inputs.tenant-id }}
+          subscription-id: ${{ inputs.subscription-id }}
+
+      # SHA-256 and a trusted timestamp: the certificates last 3 days, the
+      # signature must stay valid after
+      - name: Sign
+        uses: azure/artifact-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82 # v2.0.0
+        with:
+          endpoint: ${{ inputs.endpoint }}
+          signing-account-name: ${{ inputs.account }}
+          certificate-profile-name: ${{ inputs.profile }}
+          files-folder: ${{ github.workspace }}\tree
+          files-folder-filter: exe
+          files-folder-recurse: true
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+
+      - name: Verify the signatures
+        shell: pwsh
+        run: |
+          foreach ($exe in Get-ChildItem tree -Recurse -Filter *.exe) {
+            $sig = Get-AuthenticodeSignature $exe.FullName
+            "$($exe.FullName): $($sig.Status) $($sig.SignerCertificate.Subject)"
+            if ($sig.Status -ne 'Valid') { throw "$($exe.FullName) is not validly signed: $($sig.Status)" }
+            if ($null -eq $sig.TimeStamperCertificate) { throw "$($exe.FullName) has no timestamp" }
+          }
+
+      - name: The signed program runs
+        if: inputs.run != ''
+        working-directory: tree
+        shell: bash
+        env:
+          RUN: ${{ inputs.run }}
+        run: bash -c "$RUN"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ inputs.signed-artifact }}
+          path: tree/
+          if-no-files-found: error
